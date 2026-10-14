@@ -9,21 +9,22 @@ public class Streams1 {
 
     public static List<String> findDepartmentsWithMostUniqueProjects(List<Employee> employees) {
 
-        Map<Department, Set<Project>> projectsByDepartment = employees.stream()
-            .collect(Collectors.groupingBy(
-                Employee::department,
+        Map<String, Integer> countByDepartment = employees.stream()
+            .collect(Collectors.groupingBy(e ->
+                    e.department().name(),
                 Collectors.flatMapping(e ->
-                    e.projects().stream(), Collectors.toSet())
+                        e.projects().stream(),
+                    Collectors.collectingAndThen(Collectors.toSet(), Set::size))
             ));
 
-        int maxUniqElements = projectsByDepartment.values().stream()
-            .mapToInt(Set::size)
+        int maxUniqElements = countByDepartment.values().stream()
+            .mapToInt(Integer::intValue)
             .max()
             .orElse(0);
 
-        return projectsByDepartment.entrySet().stream()
-            .filter(e -> e.getValue().size() == maxUniqElements)
-            .map(e -> e.getKey().name())
+        return countByDepartment.entrySet().stream()
+            .filter(e -> e.getValue() == maxUniqElements)
+            .map(Map.Entry::getKey)
             .toList();
     }
 

@@ -1,9 +1,12 @@
 package org.learning.streams;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class Streams6 {
 
@@ -25,10 +28,15 @@ public class Streams6 {
 
     public static Collection<String> findEditedData(List<Data> data, List<Data> data2) {
         Map<String, String> version2 = data2.stream()
-            .collect(Collectors.toMap(Data::code, Data::version));
+            .collect(HashMap::new, (m, d) -> m.put(d.code(), d.version()), HashMap::putAll);
+
         return data.stream()
-            .filter(d -> !d.version().equals(version2.get(d.code())))
+            .filter(d -> !Objects.equals(d.version(), version2.get(d.code())))
             .map(Data::code)
             .toList();
+
+//        return Stream.concat(data.stream(), data2.stream())
+//            .collect(Collectors.toMap(Data::code, Data::version, (a, b) -> a.equals(b) ? null : b))
+//            .keySet();
     }
 }

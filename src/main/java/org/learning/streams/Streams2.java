@@ -27,7 +27,7 @@ public class Streams2 {
         LocalDateTime end
     ) {
         return transactions.stream()
-            .filter(t -> t.timestamp().isAfter(start) && t.timestamp().isBefore(end))
+            .filter(t -> !t.timestamp().isBefore(start) && !t.timestamp().isAfter(end))
             .collect(Collectors.groupingBy(
                 Transaction::clientId,
                 Collectors.mapping(Transaction::category, Collectors.toSet())

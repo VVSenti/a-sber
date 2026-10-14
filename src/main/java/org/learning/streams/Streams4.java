@@ -2,14 +2,21 @@ package org.learning.streams;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 //Задача 2: Найти студентов, у которых все оценки >= minGrade, и вернуть их имена в обратном алфавитном порядке
 
 public class Streams4 {
 
     public static List<String> filterAndSortStudents(List<Student> students, int minGrade) {
+        if (students == null) {
+            return List.of();
+        }
+
         return students.stream()
-            .filter(s -> s.grades().stream().allMatch(g -> g >= minGrade))
+            .filter(Objects::nonNull)
+            .filter(s -> s.name() != null && s.grades() != null)
+            .filter(s -> s.grades().stream().allMatch(g -> g != null && g >= minGrade))
             .map(Student::name)
             .sorted(Comparator.reverseOrder())
             .toList();
