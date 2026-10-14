@@ -1,11 +1,30 @@
 package org.learning.streams;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class Streams1 {
 
     public static List<String> findDepartmentsWithMostUniqueProjects(List<Employee> employees) {
-        return null;
+
+        Map<Department, Set<Project>> projectsByDepartment = employees.stream()
+            .collect(Collectors.groupingBy(
+                Employee::department,
+                Collectors.flatMapping(e ->
+                    e.projects().stream(), Collectors.toSet())
+            ));
+
+        int maxUniqElements = projectsByDepartment.values().stream()
+            .mapToInt(Set::size)
+            .max()
+            .orElse(0);
+
+        return projectsByDepartment.entrySet().stream()
+            .filter(e -> e.getValue().size() == maxUniqElements)
+            .map(e -> e.getKey().name())
+            .toList();
     }
 
     public static void main(String[] args) {
