@@ -3,6 +3,8 @@ package org.learning.streams;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /* 
 Найти клиентов, совершивших покупки во ВСЕХ категориях за указанный период.
@@ -24,6 +26,23 @@ public class Streams2 {
         LocalDateTime start,
         LocalDateTime end
     ) {
-        return null;
+        if (transactions == null || requiredCategories == null || requiredCategories.isEmpty()) {
+            return List.of();
+        }
+
+        return transactions.stream()
+                // 1. Фильтруем транзакции по дате в диапазоне start, end
+                .filter(t -> !t.timestamp().isBefore(start) && !t.timestamp().isAfter(end))
+                // 2. Группируем по clientId, собирая уникальные купленные категории в Set
+                .collect(Collectors.groupingBy(
+                        Transaction::clientId,
+                        Collectors.mapping(Transaction::category, Collectors.toSet())
+                ))
+                .entrySet().stream()
+                // 3. Оставляем клиентов, набор категорий которых содержит все requiredCategories
+                .filter(entry -> entry.getValue().containsAll(requiredCategories))
+                // 4. Достаем имена клиентов
+                .map(Map.Entry::getKey)
+                .toList();
     }
 }

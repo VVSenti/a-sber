@@ -1,7 +1,7 @@
 package org.learning.streams;
 
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class Streams6 {
 
@@ -22,6 +22,18 @@ public class Streams6 {
     //однако version и порядок элементов могут отличаться.
 
     public static Collection<String> findEditedData(List<Data> data, List<Data> data2) {
-        return null;
+        if (data == null || data2 == null || data.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 1. Создаем карту для второго списка: code -> version
+        Map<String, String> data2Map = data2.stream()
+                .collect(Collectors.toMap(Data::code, Data::version, (v1, v2) -> v1));
+
+        // 2. Ищем элементы из data, у которых версия отличается от версии в data2
+        return data.stream()
+                .filter(d -> !Objects.equals(d.version(), data2Map.get(d.code())))
+                .map(Data::code)
+                .toList();
     }
 }

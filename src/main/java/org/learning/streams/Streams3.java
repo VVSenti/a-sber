@@ -2,13 +2,27 @@ package org.learning.streams;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Collections;
+import java.util.stream.Collectors;
 
 // Задача 1: Сгруппировать заказы по клиенту и категории, вычислить сумму
 
 public class Streams3 {
 
     public static Map<String, Map<String, Integer>> groupOrders(List<Order> orders) {
-        return null;
+
+        if (orders == null || orders.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        return orders.stream()
+                .collect(Collectors.groupingBy(
+                        Order::clientId,
+                        Collectors.groupingBy(
+                                Order::categoryId,
+                                Collectors.summingInt(Order::amount)
+                        )
+                ));
     }
 
     public static void main(String[] args) {
