@@ -1,5 +1,5 @@
 package org.learning.streams;
 
-record Project(String id) {
+public record Project(String id) {
 
 }
