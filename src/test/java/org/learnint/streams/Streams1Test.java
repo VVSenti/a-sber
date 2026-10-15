@@ -9,6 +9,7 @@ import org.learning.streams.Employee;
 import org.learning.streams.Project;
 import org.learning.streams.Streams1;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -54,5 +55,51 @@ public class Streams1Test {
     @Test
     void emptyInputGivesEmptyResult() {
         assertTrue(Streams1.findDepartmentsWithMostUniqueProjects(List.of()).isEmpty());
+    }
+
+    @Test
+    void nullEmployeeIsSkipped() {
+        var employees = Arrays.asList(
+            null,
+            new Employee("1", depA, List.of(new Project("1"))));
+        assertEquals(List.of("depA"), Streams1.findDepartmentsWithMostUniqueProjects(employees));
+    }
+
+    @Test
+    void employeeWithoutDepartmentIsSkipped() {
+        var employees = List.of(
+            new Employee("1", null, List.of(new Project("1"), new Project("2"))),
+            new Employee("2", depA, List.of(new Project("3"))));
+        assertEquals(List.of("depA"), Streams1.findDepartmentsWithMostUniqueProjects(employees));
+    }
+
+    @Test
+    void departmentWithNullNameIsSkipped() {
+        var employees = List.of(
+            new Employee("1", new Department(null), List.of(new Project("1"))),
+            new Employee("2", depA, List.of(new Project("2"))));
+        assertEquals(List.of("depA"), Streams1.findDepartmentsWithMostUniqueProjects(employees));
+    }
+
+    @Test
+    void nullProjectsListCountsAsZero() {
+        var employees = List.of(
+            new Employee("1", depA, null),
+            new Employee("2", depB, List.of(new Project("1"))));
+        assertEquals(List.of("depB"), Streams1.findDepartmentsWithMostUniqueProjects(employees));
+    }
+
+    @Test
+    void nullProjectIsNotCounted() {
+        var employees = List.of(
+            new Employee("1", depA, Arrays.asList(new Project("1"), null)),
+            new Employee("2", depB, List.of(new Project("1"), new Project("2"))));
+        // depA = 1 (null не считается), depB = 2
+        assertEquals(List.of("depB"), Streams1.findDepartmentsWithMostUniqueProjects(employees));
+    }
+
+    @Test
+    void nullEmployeeListGivesEmptyResult() {
+        assertTrue(Streams1.findDepartmentsWithMostUniqueProjects(null).isEmpty());
     }
 }

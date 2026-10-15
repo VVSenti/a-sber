@@ -15,7 +15,8 @@ public class Streams4 {
 
         return students.stream()
             .filter(Objects::nonNull)
-            .filter(s -> s.name() != null && s.grades() != null)
+            .filter(s -> s.name() != null)
+            .filter(s -> s.grades() != null && !s.grades().isEmpty())
             .filter(s -> s.grades().stream().allMatch(g -> g != null && g >= minGrade))
             .map(Student::name)
             .sorted(Comparator.reverseOrder())

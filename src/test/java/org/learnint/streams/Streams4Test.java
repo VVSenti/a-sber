@@ -42,9 +42,11 @@ public class Streams4Test {
     }
 
     @Test
-    void studentWithoutGradesPassesByDefault() {
-        var students = List.of(new Student("Anna", List.of()));
-        assertEquals(List.of("Anna"), Streams4.filterAndSortStudents(students, 4));
+    void studentWithoutGradesIsExcluded() {
+        var students = List.of(
+            new Student("Anna", List.of()),
+            new Student("Boris", List.of(5, 5)));
+        assertEquals(List.of("Boris"), Streams4.filterAndSortStudents(students, 4));
     }
 
     @Test

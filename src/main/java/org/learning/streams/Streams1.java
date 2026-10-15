@@ -2,18 +2,27 @@ package org.learning.streams;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class Streams1 {
 
     public static List<String> findDepartmentsWithMostUniqueProjects(List<Employee> employees) {
+        if (employees == null) {
+            return List.of();
+        }
 
         Map<String, Integer> countByDepartment = employees.stream()
+            .filter(Objects::nonNull)
+            .filter(e -> e.department() != null && e.department().name() != null)
             .collect(Collectors.groupingBy(e ->
                     e.department().name(),
                 Collectors.flatMapping(e ->
-                        e.projects().stream(),
+                        e.projects() == null ?
+                            Stream.empty()
+                            : e.projects().stream().filter(Objects::nonNull),
                     Collectors.collectingAndThen(Collectors.toSet(), Set::size))
             ));
 
