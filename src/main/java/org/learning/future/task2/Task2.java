@@ -1,0 +1,160 @@
+package org.learning.future.task2;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
+
+// Задача 2
+//Есть 10 потоков. Каждый поток 10 000 раз увеличивает общий счетчик.
+//
+//Дан код: class Counter { private int value = 0;
+//
+//public void increment() {
+//	value++;
+//}
+//
+//public int getValue() {
+//	return value;
+//}
+//}
+//
+//Нужно запустить инкременты параллельно через ExecutorService и добиться гарантированного результата 100_000.
+//
+//Кандидат должен предложить несколько вариантов решения:
+//
+//synchronized; AtomicInteger; LongAdder.
+//
+//Что проверить:
+//
+//понимает ли кандидат, почему value++ не является атомарной операцией; разницу между volatile и AtomicInteger; когда LongAdder предпочтительнее AtomicInteger; что происходит с производительностью при большом количестве конкурентных обновлений.
+//
+//Хорошее дополнительное задание: попросить кандидата объяснить, почему простое добавление volatile проблему не решает.
+public class Task2 {
+
+    private static final int THREAD_COUNT = 10;
+    private static final int INCREMENT_PER_THREAD = 10000000;
+
+//    public static void main(String[] args) throws InterruptedException {
+//
+//        var lock = new ReentrantLock();
+//
+//        var counter = new Counter();
+//        var executorService = Executors.newFixedThreadPool(THREAD_COUNT);
+//
+//        long startTime = System.currentTimeMillis();
+//
+//        for (int j = 0; j < THREAD_COUNT; j++) {
+//            executorService.submit(() -> {
+//                for (int i = 0; i < INCREMENT_PER_THREAD; i++) {
+//                    lock.lock();
+//                    try {
+//                        counter.increment();
+//                    } finally {
+//                        lock.unlock();
+//                    }
+//                }
+//            });
+//        }
+//
+//        executorService.shutdown();
+//        executorService.awaitTermination(30, TimeUnit.SECONDS);
+//
+//        long endTime = System.currentTimeMillis();
+//        long res = endTime - startTime;
+//
+//        System.out.println("Executed in " + res + " milliseconds.");
+//
+//        System.out.println(counter.getValue());
+//    }
+
+    // =========== Solution 2 ================
+
+//    public static void main(String[] args) throws InterruptedException {
+//        var counter = new SynchronizedCounter();
+//        var executor = Executors.newFixedThreadPool(THREAD_COUNT);
+//
+//        long startTime = System.currentTimeMillis();
+//
+//        for (int t = 0; t < THREAD_COUNT; t++) {
+//            executor.submit(() -> {
+//                for (int i = 0; i < INCREMENT_PER_THREAD; i++) {
+//                    counter.increment();
+//                }
+//            });
+//        }
+//        int expected = THREAD_COUNT * INCREMENT_PER_THREAD;
+//
+//        executor.shutdown();
+//        executor.awaitTermination(30, TimeUnit.SECONDS);
+//
+//        long endTime = System.currentTimeMillis();
+//        long res = endTime - startTime;
+//
+//        System.out.println("Executed in " + res + " milliseconds.");
+//
+//        System.out.println("Expected: " + expected);
+//        System.out.println("Fact: " + counter.getValue());
+//    }
+
+// =============== Solution 3 ===============
+
+//    public static void main(String[] args) throws InterruptedException {
+//        var counter = new AtomicCounter();
+//        var executor = Executors.newFixedThreadPool(THREAD_COUNT);
+//
+//        long startTime = System.currentTimeMillis();
+//
+//        for (int t = 0; t < THREAD_COUNT; t++) {
+//            executor.submit(() -> {
+//                for (int i = 0; i < INCREMENT_PER_THREAD; i++) {
+//                    counter.increment();
+//                }
+//            });
+//        }
+//        int expected = THREAD_COUNT * INCREMENT_PER_THREAD;
+//
+//        executor.shutdown();
+//        executor.awaitTermination(30, TimeUnit.SECONDS);
+//
+//        long endTime = System.currentTimeMillis();
+//        long res = endTime - startTime;
+//
+//        System.out.println("Executed in " + res + " milliseconds.");
+//
+//        System.out.println("Expected: " + expected);
+//        System.out.println("Fact: " + counter.getValue());
+//    }
+
+// =========== Solution 4 ===================
+
+    public static void main(String[] args) throws InterruptedException {
+        var counter = new LongAdderCounter();
+        var executor = Executors.newFixedThreadPool(THREAD_COUNT);
+
+        long startTime = System.currentTimeMillis();
+
+        for (int t = 0; t < THREAD_COUNT; t++) {
+            executor.submit(() -> {
+                for (int i = 0; i < INCREMENT_PER_THREAD; i++) {
+                    counter.increment();
+                }
+            });
+        }
+
+        int expected = THREAD_COUNT * INCREMENT_PER_THREAD;
+
+        executor.shutdown();
+        executor.awaitTermination(30, TimeUnit.SECONDS);
+
+        long endTime = System.currentTimeMillis();
+        long res = endTime - startTime;
+
+        System.out.println("Executed in " + res + " milliseconds.");
+
+        System.out.printf("LongAdder → %d (ожидалось %d)%n",
+                counter.getValue(), expected);
+    }
+
+}
