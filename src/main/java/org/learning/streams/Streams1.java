@@ -3,38 +3,30 @@ package org.learning.streams;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import static java.util.stream.Collectors.*;
+import static java.util.stream.Collectors.toSet;
 
 public class Streams1 {
 
     public static List<String> findDepartmentsWithMostUniqueProjects(List<Employee> employees) {
-        if (employees == null || employees.isEmpty()) {
+        if(employees==null || employees.isEmpty()) {
             return List.of();
         }
 
-        // 1. Группируем проекты по имени департамента в Set для устранения дублей
-        Map<String, Set<Project>> deptProjects = employees.stream()
-                .collect(Collectors.groupingBy(
-                        emp -> emp.department().name(),
-                        Collectors.flatMapping(
-                                emp -> emp.projects().stream(),
-                                Collectors.toSet()
-                        )
-                ));
+        Map<String, Integer> depProject = employees.stream()
+                .filter(emp -> emp != null && emp.department() != null && emp.department().name() != null)
+                .collect(groupingBy(emp ->  emp.department().name(),
+                        flatMapping(emp->emp.projects()!=null?emp.projects().stream(): Stream.<Project>empty(),
+                                collectingAndThen(toSet(),Set::size))));
 
-        // 2. Находим максимальное количество уникальных проектов среди всех отделов
-        long maxProjects = deptProjects.values().stream()
-                .mapToLong(Set::size)
-                .max()
-                .orElse(0);
-
-        if (maxProjects == 0) {
+        int maxProject = depProject.values().stream().max(Integer::compareTo).orElse(0);
+        if(maxProject==0) {
             return List.of();
         }
 
-        // 3. Отбираем все отделы, у которых число проектов равно максимуму
-        return deptProjects.entrySet().stream()
-                .filter(entry -> entry.getValue().size() == maxProjects)
+        return depProject.entrySet().stream()
+                .filter(entry -> entry.getValue()==maxProject)
                 .map(Map.Entry::getKey)
                 .toList();
     }

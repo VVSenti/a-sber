@@ -19,9 +19,6 @@ public class Streams7 {
                 // 2. Сортируем в алфавитном порядке
                 .sorted()
                 // 3. Группируем по длине строки
-                .collect(Collectors.groupingBy(
-                        String::length,
-                        Collectors.toList()
-                ));
+                .collect(Collectors.groupingBy(String::length));
     }
 }

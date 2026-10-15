@@ -26,11 +26,11 @@ public class Streams5
     }
 
     private static long factorial(int n) {
-        if (n <= 1) {
-            return 1L;
+        if (n < 0) {
+            throw new IllegalArgumentException("Факториал не определен для отрицательных чисел: " + n);
         }
         return LongStream.rangeClosed(2, n)
-                .reduce(1L, (a, b) -> a * b);
+                .reduce(1L, Math::multiplyExact);
     }
 
 }

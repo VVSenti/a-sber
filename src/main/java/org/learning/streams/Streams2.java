@@ -32,8 +32,7 @@ public class Streams2 {
 
         return transactions.stream()
                 // 1. Фильтруем транзакции по дате в диапазоне start, end
-                .filter(t -> (t.timestamp().isEqual(start) || t.timestamp().isAfter(start))
-                        && (t.timestamp().isEqual(end) || t.timestamp().isBefore(end)))
+                .filter(t -> !t.timestamp().isBefore(start) && !t.timestamp().isAfter(end))
                 // 2. Группируем по clientId, собирая уникальные купленные категории в Set
                 .collect(Collectors.groupingBy(
                         Transaction::clientId,
