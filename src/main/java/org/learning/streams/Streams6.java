@@ -1,7 +1,11 @@
 package org.learning.streams;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class Streams6 {
 
@@ -22,6 +26,12 @@ public class Streams6 {
     //однако version и порядок элементов могут отличаться.
 
     public static Collection<String> findEditedData(List<Data> data, List<Data> data2) {
-        return null;
-    }
+        return Stream.concat(data.stream(), data2.stream())
+                .collect(Collectors.toMap(
+                        Data::code,
+                        Data::version,
+                        (l1, l2) -> l1.equals(l2) ? null : l2
+                ))
+                .keySet();
+        }
 }

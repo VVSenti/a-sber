@@ -1,5 +1,5 @@
 package org.learning.streams;
 
-record Department(String name) {
+public record Department(String name) {
 
 }
