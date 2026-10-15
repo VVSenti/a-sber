@@ -2,8 +2,8 @@ package org.learning.streams;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Stream;
 import static java.util.stream.Collectors.*;
 import static java.util.stream.Collectors.toSet;
 
@@ -17,16 +17,15 @@ public class Streams1 {
         Map<String, Integer> depProject = employees.stream()
                 .filter(emp -> emp != null && emp.department() != null && emp.department().name() != null)
                 .collect(groupingBy(emp ->  emp.department().name(),
-                        flatMapping(emp->emp.projects()!=null?emp.projects().stream(): Stream.<Project>empty(),
-                                collectingAndThen(toSet(),Set::size))));
+                        flatMapping(emp -> Objects.requireNonNullElse(emp.projects(), List.<Project>of()).stream(),
+                                collectingAndThen(toSet(), Set::size))));
 
-        int maxProject = depProject.values().stream().max(Integer::compareTo).orElse(0);
-        if(maxProject==0) {
-            return List.of();
-        }
+        int maxProject = depProject.values().stream()
+                .max(Integer::compareTo)
+                .orElse(0);
 
         return depProject.entrySet().stream()
-                .filter(entry -> entry.getValue()==maxProject)
+                .filter(entry -> entry.getValue() == maxProject)
                 .map(Map.Entry::getKey)
                 .toList();
     }
