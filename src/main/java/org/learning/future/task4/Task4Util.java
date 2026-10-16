@@ -1,0 +1,65 @@
+package org.learning.future.task4;
+
+import java.util.concurrent.Callable;
+
+public class Task4Util {
+
+    public static final String CACHE_TASK_ENDED_PATTERN = "Cache task was executed in %s milliseconds";
+    public static final String CONFIG_TASK_ENDED_PATTERN = "Config task was executed in %s milliseconds";
+    public static final String INFO_TASK_ENDED_PATTERN = "Info task was executed in %s milliseconds";
+
+
+    public static Task getCache() {
+        Callable<String> callable = () -> {
+            var startTime = System.currentTimeMillis();
+            Thread.sleep(50);
+            var endTime = System.currentTimeMillis();
+
+            var executeTime = endTime - startTime;
+            System.out.println(String.format(CACHE_TASK_ENDED_PATTERN, executeTime));
+            return "cache";
+        };
+
+        return Task
+                .builder()
+                .status(Status.NEW)
+                .taskName("cache")
+                .callable(callable)
+                .build();
+    }
+
+    public static Task getConfig() {
+        Callable<String> callable = () -> {
+            var startTime = System.currentTimeMillis();
+            Thread.sleep(1000);
+            var endTime = System.currentTimeMillis();
+            var executeTime = endTime - startTime;
+            System.out.println(String.format(CONFIG_TASK_ENDED_PATTERN, executeTime));
+            return "config";
+        };
+
+        return Task
+                .builder()
+                .status(Status.NEW)
+                .taskName("config")
+                .callable(callable)
+                .build();
+    }
+
+    public static Task getInfo() {
+        Callable<String> callable = () -> {
+            var startTime = System.currentTimeMillis();
+            Thread.sleep(3000);
+            var endTime = System.currentTimeMillis();
+            var executeTime = endTime - startTime;
+            System.out.println(String.format(INFO_TASK_ENDED_PATTERN, executeTime));
+            return "info";
+        };
+        return Task
+                .builder()
+                .status(Status.NEW)
+                .taskName("info")
+                .callable(callable)
+                .build();
+    }
+}
