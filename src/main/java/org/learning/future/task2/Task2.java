@@ -1,10 +1,7 @@
 package org.learning.future.task2;
 
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
 
 // Задача 2
 //Есть 10 потоков. Каждый поток 10 000 раз увеличивает общий счетчик.
@@ -134,22 +131,11 @@ public class Task2 {
         var executor = Executors.newFixedThreadPool(THREAD_COUNT);
 
         long startTime = System.currentTimeMillis();
-        var lock = new ReentrantLock();
 
         for (int t = 0; t < THREAD_COUNT; t++) {
             executor.submit(() -> {
-        var counter = new Counter();
-        var executorService = Executors.newFixedThreadPool(THREAD_COUNT);
-
-        for (int j = 0; j < THREAD_COUNT; j++) {
-            executorService.submit(() -> {
                 for (int i = 0; i < INCREMENT_PER_THREAD; i++) {
-                    lock.lock();
-                    try {
-                        counter.increment();
-                    } finally {
-                        lock.unlock();
-                    }
+                    counter.increment();
                 }
             });
         }
@@ -158,17 +144,13 @@ public class Task2 {
 
         executor.shutdown();
         executor.awaitTermination(30, TimeUnit.SECONDS);
-        executorService.shutdown();
-        executorService.awaitTermination(30, TimeUnit.SECONDS);
 
         long endTime = System.currentTimeMillis();
         long res = endTime - startTime;
 
         System.out.println("Executed in " + res + " milliseconds.");
 
-        System.out.printf("LongAdder → %d (ожидалось %d)%n",
-                counter.getValue(), expected);
-        System.out.println(counter.getValue());
+        System.out.println("Expected: " + expected);
+        System.out.println("Fact: " + counter.getValue());
     }
-
 }

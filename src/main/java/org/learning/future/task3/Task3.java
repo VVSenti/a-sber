@@ -44,7 +44,6 @@ public class Task3 {
     private static final int INFO_MESSAGE_COUNT = 2400;
     private static final int WARN_MESSAGE_COUNT = 4000;
 
-    public static void main(String[] args) throws InterruptedException {
     public static void main(String[] args) throws InterruptedException, ExecutionException {
 
         var executor = Executors.newFixedThreadPool(THREAD_COUNT);
