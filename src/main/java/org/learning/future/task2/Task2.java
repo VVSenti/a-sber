@@ -134,11 +134,22 @@ public class Task2 {
         var executor = Executors.newFixedThreadPool(THREAD_COUNT);
 
         long startTime = System.currentTimeMillis();
+        var lock = new ReentrantLock();
 
         for (int t = 0; t < THREAD_COUNT; t++) {
             executor.submit(() -> {
+        var counter = new Counter();
+        var executorService = Executors.newFixedThreadPool(THREAD_COUNT);
+
+        for (int j = 0; j < THREAD_COUNT; j++) {
+            executorService.submit(() -> {
                 for (int i = 0; i < INCREMENT_PER_THREAD; i++) {
-                    counter.increment();
+                    lock.lock();
+                    try {
+                        counter.increment();
+                    } finally {
+                        lock.unlock();
+                    }
                 }
             });
         }
@@ -147,6 +158,8 @@ public class Task2 {
 
         executor.shutdown();
         executor.awaitTermination(30, TimeUnit.SECONDS);
+        executorService.shutdown();
+        executorService.awaitTermination(30, TimeUnit.SECONDS);
 
         long endTime = System.currentTimeMillis();
         long res = endTime - startTime;
@@ -155,6 +168,7 @@ public class Task2 {
 
         System.out.printf("LongAdder → %d (ожидалось %d)%n",
                 counter.getValue(), expected);
+        System.out.println(counter.getValue());
     }
 
 }
