@@ -23,7 +23,7 @@ import java.util.UUID;
 
 public class Task1 {
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) {
         var processor = new OrderProcessor();
         var orders = generateRandomOrders(50000);
 
@@ -53,5 +53,4 @@ public class Task1 {
                 .number(UUID.randomUUID())
                 .build();
     }
-
 }
