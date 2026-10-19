@@ -1,5 +1,6 @@
 package org.learning.future.task4;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -29,24 +30,22 @@ import java.util.concurrent.TimeUnit;
  */
 public class Task4 {
 
-    public static final Integer THREAD_COUNT = 3;
-    public static final String TASK_DONE = "task '%s' is done.";
+    private static final Integer THREAD_COUNT = 3;
+    private static final Integer TASKS_COUNT = 3;
     private static final ExecutorService executorService = Executors.newFixedThreadPool(THREAD_COUNT);
+    private static final String WAITING_TIME_EXCEEDED = "Waiting time exceeded";
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) {
 
+        var countDownLatch = new CountDownLatch(TASKS_COUNT);
 
-        var cache = Task4Util.getCache();
-        var info = Task4Util.getInfo();
-        var config = Task4Util.getConfig();
+        var cache = Task4Util.getCache(countDownLatch);
+        var info = Task4Util.getInfo(countDownLatch);
+        var config = Task4Util.getConfig(countDownLatch);
 
         var tasks = List.of(cache, info, config);
 
-        var taskCount = tasks.size();
-
-        var countDownLatch = new CountDownLatch(taskCount);
-
-        for (int i = 0; i < taskCount; i++) {
+        for (int i = 0; i < TASKS_COUNT; i++) {
             var curTask = tasks.get(i);
             executorService.submit(curTask.getCallable());
 
@@ -56,24 +55,21 @@ public class Task4 {
 
             curTask.setStatus(Status.PROCESSING);
             System.out.println(String.format("Task '%s' is done!", curTask.getTaskName()));
-            countDownLatch.countDown();
         }
 
-        executorService.shutdown();
-        executorService.awaitTermination(30, TimeUnit.SECONDS);
-
+        try {
+            countDownLatch.await(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            System.out.println(WAITING_TIME_EXCEEDED);
+            Thread.currentThread().interrupt();
+        }
         System.out.println("All tasks is Done!");
-    }
 
-    private static List<Task> prepareTaskList(List<Callable<String>> callableList) {
-        return callableList
-                .stream()
-                .map(c -> Task
-                        .builder()
-                        .callable(c)
-                        .status(Status.NEW)
-                        .taskName(c.toString())
-                        .build())
-                .toList();
+        executorService.shutdown();
+        try {
+            executorService.awaitTermination(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }
