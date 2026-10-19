@@ -71,10 +71,14 @@ public class OrderProcessor {
 
     }
 
-    private OrderResult processOrder(Order order) throws InterruptedException {
+    private OrderResult processOrder(Order order) {
         var result = OrderResultMapper.generateNewOrderResultFromOrder(order);
 
-        Thread.sleep(Task1Constants.COMPUTE_TIME_IN_MILLIS);
+        try {
+            Thread.sleep(Task1Constants.COMPUTE_TIME_IN_MILLIS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
 
         result.setStatus(Status.DONE);
         return result;
