@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.IntStream;
 
+// ## Задача 1
 public class OrderProcessor {
 
     record Order(int id, int clientId, int quantity, double price) {
@@ -19,6 +20,7 @@ public class OrderProcessor {
     }
 
     static OrderResult process(Order order) throws InterruptedException {
+        // заказ 42 "зависает", каждый 25-й падает с ошибкой
         long delayMs = order.id() == 42 ? 3_000 : 100;
         Thread.sleep(delayMs);
 
