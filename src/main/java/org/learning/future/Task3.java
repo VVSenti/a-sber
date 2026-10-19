@@ -1,34 +1,58 @@
 package org.learning.future;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 public class Task3 {
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws InterruptedException, ExecutionException {
         List<String> logs = generateLogs();
 
-        Map<String, Integer> logCounts = new ConcurrentHashMap<>();
+        //Определяем размер пула динамически
+        int poolSize = Runtime.getRuntime().availableProcessors();
 
-        int poolSize = 4;
         ExecutorService executor = Executors.newFixedThreadPool(poolSize);
 
-        for (String log : logs) {
-            executor.submit(() -> {
-                String type = extractLogType(log);
-                if (type != null) {
-                    // Атомарно увеличиваем значение на 1
-                    logCounts.merge(type, 1, Integer::sum);
+        //Делим список на чанки
+        int chunkSize = (int) Math.ceil((double) logs.size() / poolSize);
+        List<Callable<Map<String, Integer>>> tasks = new ArrayList<>();
+
+        for (int i = 0; i < logs.size(); i += chunkSize) {
+            int end = Math.min(i + chunkSize, logs.size());
+            List<String> subList = logs.subList(i, end);
+
+            //Создаем одну задачу на часть списка а не на каждую строку
+            tasks.add(() -> {
+                Map<String, Integer> localCounts = new HashMap<>();
+                for (String log : subList) {
+                    String type = extractLogType(log);
+                    if (type != null) {
+                        localCounts.merge(type, 1, Integer::sum);
+                    }
                 }
+                return localCounts;
             });
         }
 
+        //Запускаем все задачи разом и ждем их завершения
+        List<Future<Map<String, Integer>>> futures = executor.invokeAll(tasks);
+
+        //Объединяем результаты в общую ConcurrentHashMap
+        Map<String, Integer> logCounts = new ConcurrentHashMap<>();
+        for (Future<Map<String, Integer>> future : futures) {
+            Map<String, Integer> partialResult = future.get(); // Получаем результат части
+            partialResult.forEach((type, count) ->
+                    logCounts.merge(type, count, Integer::sum)
+            );
+        }
+
+        //завершаем пул
         executor.shutdown();
-        executor.awaitTermination(1, TimeUnit.MINUTES);
+        if (!executor.awaitTermination(1, TimeUnit.MINUTES)) {
+            executor.shutdownNow(); //если не успели прерываем
+        }
 
         logCounts.forEach((type, count) -> System.out.println(type + " -> " + count));
     }
