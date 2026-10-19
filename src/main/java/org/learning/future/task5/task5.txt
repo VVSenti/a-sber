@@ -1,0 +1,33 @@
+Задача 5
+Код-ревью
+
+public class ReportService {
+
+private final ExecutorService executor = Executors.newFixedThreadPool(10);  -- хардкод + в конфигурационный класс
+              -- + executor на уровне сервиса -> после завершения метода, который его использует, его больше нельзя будет использовать
+              -- (метод shutdown() не даст его заново использовать)
+              -- newFixedThreadPool использует неограниченную очередь. может захлебнуться от задач -> OOM
+
+private final Map<Long, Report> reports = new HashMap<>();      -- raceCondition + записи могут затираться другими потоками.
+                                        Если заменить на ConcurrentHashMap, стоит учесть, что она не допсука null в ключе -> NPE учесть
+
+public void generateReports(List<Long> ids) {   -- NPE + нужен юлок try-finnaly + лучше заменить void на возвращаемое значение, чтобы вызывающий мог обработать
+
+	for (Long id : ids) {   -- в листе могут быть дубликаты, и report может затереться другой записью
+		executor.submit(() -> {
+			Report report = generateReport(id);
+			reports.put(id, report);
+
+		});     -- игнорируется Future. Если вылетит ошибка, то в вызывающий поток она не пробросится
+	}
+	-- можно использовать executorService.invokeAll(...), и тут обработать возможные исключения
+
+	executor.shutdown();    -- вызов метода убьет executor, и тот больше не вызвать
+	-- нет ожидания завершения всех потоков через awaitTermination
+	-- если через указанное время ничего не произойдет, то вылетит ошибка InterruptedException, где нужно выставить флаг потока на interrupted,
+	-- чтобы у пула было корректное состояние потока
+
+	System.out.println("Reports generated: " + reports.size());   -- если не все задачи успеют завершиться, то и не все занесуесутся в мапу.
+	 остальные таски продолжат выполняться и рано или поздно обновят это значение
+}
+}
