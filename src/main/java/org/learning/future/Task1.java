@@ -5,13 +5,18 @@ import java.util.List;
 import java.util.concurrent.*;
 
 public class Task1 {
-    //Динамически определяем размер пула
-    static int poolSize = Runtime.getRuntime().availableProcessors();
-
     public record ProcessedOrder(int orderId, double totalAmount, String status) {}
     public record OrderSubmission(int orderId, Future<ProcessedOrder> future) {}
 
     public static void main(String[] args) {
+
+        //Узнаем количество доступных ядер процессора
+        int cores = Runtime.getRuntime().availableProcessors();
+
+        //Так как processOrder содержит Thread.sleep это I/O-bound задача,
+        //потоки будут простаивать в ожидании. Поэтому берем потоков больше, чем ядер.
+        int poolSize = cores * 2;
+
         List<Integer> orderIds = new ArrayList<>();
         for (int i = 1; i <= 100; i++) {
             orderIds.add(i);
@@ -21,7 +26,6 @@ public class Task1 {
         List<OrderSubmission> submissions = new ArrayList<>();
 
         for (int orderId : orderIds) {
-            // Используем глагол processOrder в вызове
             Future<ProcessedOrder> future = executor.submit(() -> processOrder(orderId));
             submissions.add(new OrderSubmission(orderId, future));
         }
@@ -89,3 +93,13 @@ public class Task1 {
         }
     }
 }
+//понял свою ошибку
+//Изначально я взял availableProcessors, потому что это количество ядер. Это оптимально только для CPU-bound задач
+// например математические вычисления. В таком случае мы не создаем лишних потоков, чтобы избежать переключения контекста,
+// когда потоки толкаются за процессор.
+//Однако в моем коде метод processOrder содержит Thread.sleep(100).
+// Это делает задачу I/O-bound, тоесть пока поток спит, ядро процессора простаивает.
+// Если мы создадим потоков ровно по количеству ядер, то во время ожидания пул просто встанет,
+// и остальные задачи из очереди не будут обрабатываться.
+//По формуле Брайана Гетца, для I/O-bound задач потоков нужно больше чем ядер, обычно N * 2 или больше, в зависимости от времени ожидания.
+// Поэтому исправил код и взял availableProcessors * 2.

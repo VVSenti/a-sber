@@ -1,5 +1,7 @@
 package org.learning.future;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
@@ -50,29 +52,33 @@ public class Task2 {
         }
     }
 
-    public static void testCounter(Counter counter) throws InterruptedException{
-
+    static void testCounter(Counter counter) throws InterruptedException {
         int threadsCount = 10;
         int incrementsPerThread = 10_000;
 
         ExecutorService executor = Executors.newFixedThreadPool(threadsCount);
         try {
-            CountDownLatch latch = new CountDownLatch(threadsCount);
+            List<Callable<Void>> tasks = new ArrayList<>();
 
             for (int i = 0; i < threadsCount; i++) {
-                executor.submit(() -> {
-                    try {
-                        for (int j = 0; j < incrementsPerThread; j++) {
-                            counter.increment();
-                        }
-                    } finally {
-                        latch.countDown();
+                tasks.add(() -> {
+                    for (int j = 0; j < incrementsPerThread; j++) {
+                        counter.increment();
                     }
+                    return null;
                 });
             }
+            List<Future<Void>> futures = executor.invokeAll(tasks);
 
-            latch.await();
+            // Проверяем результаты на наличие ошибок
+            for (Future<Void> future : futures) {
+                future.get();
+            }
+
             System.out.println(counter.getClass().getSimpleName() + " итоговое значение: " + counter.getValue());
+
+        } catch (ExecutionException e) {
+            System.err.println("Ошибка при выполнении задачи: " + e.getCause().getMessage());
         } finally {
             executor.shutdown();
         }
@@ -83,3 +89,6 @@ public class Task2 {
         testCounter(new LongAdderCounter());
     }
 }
+//Согласен CountDownLatch здесь действительно был как костыль, т.к все задачи крутятся внутри одного ExecutorService,
+//проще использовать встроенные механизмы ожидания.
+//Решил не просто вызывать invokeAll, а сохранить возвращаемый список Future и пробежаться по нему через future.get

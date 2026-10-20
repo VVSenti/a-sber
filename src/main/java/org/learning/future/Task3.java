@@ -8,25 +8,43 @@ import java.util.concurrent.*;
 
 public class Task3 {
     public static void main(String[] args) throws InterruptedException, ExecutionException {
+
         List<String> logs = generateLogs();
 
-        //Определяем размер пула динамически
         int poolSize = Runtime.getRuntime().availableProcessors();
 
         ExecutorService executor = Executors.newFixedThreadPool(poolSize);
 
-        //Делим список на чанки
-        int chunkSize = (int) Math.ceil((double) logs.size() / poolSize);
+        List<Callable<Map<String, Integer>>> tasks = createTasks(logs, poolSize);
+
+        List<Future<Map<String, Integer>>> futures = executor.invokeAll(tasks);
+
+        //Объединяем результаты
+        Map<String, Integer> logCounts = new ConcurrentHashMap<>();
+        for (Future<Map<String, Integer>> future : futures) {
+            Map<String, Integer> partialResult = future.get();
+            partialResult.forEach((type, count) ->
+                    logCounts.merge(type, count, Integer::sum)
+            );
+        }
+        //Завершаем пул
+        executor.shutdown();
+        if (!executor.awaitTermination(1, TimeUnit.MINUTES)) {
+            executor.shutdownNow();
+        }
+
+        logCounts.forEach((type, count) -> System.out.println(type + " -> " + count));
+    }
+
+    private static List<Callable<Map<String, Integer>>> createTasks(List<String> logs, int poolSize) {
         List<Callable<Map<String, Integer>>> tasks = new ArrayList<>();
 
-        for (int i = 0; i < logs.size(); i += chunkSize) {
-            int end = Math.min(i + chunkSize, logs.size());
-            List<String> subList = logs.subList(i, end);
-
-            //Создаем одну задачу на часть списка а не на каждую строку
+        for (int i = 0; i < poolSize; i++) {
+            final int taskId = i;
             tasks.add(() -> {
                 Map<String, Integer> localCounts = new HashMap<>();
-                for (String log : subList) {
+                for (int j = taskId; j < logs.size(); j += poolSize) {
+                    String log = logs.get(j);
                     String type = extractLogType(log);
                     if (type != null) {
                         localCounts.merge(type, 1, Integer::sum);
@@ -35,26 +53,7 @@ public class Task3 {
                 return localCounts;
             });
         }
-
-        //Запускаем все задачи разом и ждем их завершения
-        List<Future<Map<String, Integer>>> futures = executor.invokeAll(tasks);
-
-        //Объединяем результаты в общую ConcurrentHashMap
-        Map<String, Integer> logCounts = new ConcurrentHashMap<>();
-        for (Future<Map<String, Integer>> future : futures) {
-            Map<String, Integer> partialResult = future.get(); // Получаем результат части
-            partialResult.forEach((type, count) ->
-                    logCounts.merge(type, count, Integer::sum)
-            );
-        }
-
-        //завершаем пул
-        executor.shutdown();
-        if (!executor.awaitTermination(1, TimeUnit.MINUTES)) {
-            executor.shutdownNow(); //если не успели прерываем
-        }
-
-        logCounts.forEach((type, count) -> System.out.println(type + " -> " + count));
+        return tasks;
     }
 
     private static String extractLogType(String log) {
@@ -73,3 +72,4 @@ public class Task3 {
         return list;
     }
 }
+//Понял, вариант с шагом j += poolSize действительно гораздо чище
