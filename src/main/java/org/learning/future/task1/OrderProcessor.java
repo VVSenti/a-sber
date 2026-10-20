@@ -21,7 +21,15 @@ public class OrderProcessor {
 
         try {
             List<Callable<OrderResult>> tasks = orders.stream()
-                    .<Callable<OrderResult>>map(order -> () -> processOrder(order))
+                    .<Callable<OrderResult>>map(order -> () ->
+                    {
+                        try {
+                            return processOrder(order);
+                        } catch (RuntimeException e) {
+                            return generateFailedOrderResult(order);
+                        }
+
+                    })
                     .toList();
             List<Future<OrderResult>> futures;
             try {
@@ -48,7 +56,7 @@ public class OrderProcessor {
                     Thread.currentThread().interrupt();
                     break;
                 } catch (CancellationException e) {
-                    System.out.println(Task1Constants.ORDER_TIMED_OUT_EXCEPTION);
+                    System.out.println(Task1Constants.CANCELLATION_EXCEPTION);
                 }
             }
 
@@ -77,10 +85,17 @@ public class OrderProcessor {
         try {
             Thread.sleep(Task1Constants.COMPUTE_TIME_IN_MILLIS);
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupt exception in " + Thread.currentThread().getName());
         }
 
         result.setStatus(Status.DONE);
         return result;
+    }
+
+    private OrderResult generateFailedOrderResult(Order order) {
+        return OrderResult
+                .builder()
+                .status(Status.ERROR)
+                .order(order).build();
     }
 }

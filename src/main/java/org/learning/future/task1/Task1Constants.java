@@ -12,7 +12,7 @@ public class Task1Constants {
     public final int AWAIT_TERMINATION_IN_SECONDS = 10;
 
     public final String ORDER_FAILED_PATTERN_EXCEPTION =  "Order failed: %s";
-    public final String ORDER_TIMED_OUT_EXCEPTION =  "Order timed out!";
+    public final String CANCELLATION_EXCEPTION =  "Cancellation exception!";
     public final String INTERRUPT_WHILE_WAITING_EXCEPTION = "Interrupted while waiting!";
 
 }
