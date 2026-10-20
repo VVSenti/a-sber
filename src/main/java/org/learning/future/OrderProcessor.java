@@ -2,12 +2,16 @@ package org.learning.future;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 // ## Задача 1
@@ -19,48 +23,94 @@ public class OrderProcessor {
     record OrderResult(int orderId, String clientName, double total) {
     }
 
-    static OrderResult process(Order order) throws InterruptedException {
-        // заказ 42 "зависает", каждый 25-й падает с ошибкой
-        long delayMs = order.id() == 42 ? 3_000 : 100;
-        Thread.sleep(delayMs);
-
-        if (order.id() % 25 == 0) {
-            throw new IllegalStateException("Клиент не найден для заказа " + order.id());
-        }
-
-        String clientName = "Client-" + order.clientId();
-        double total = order.quantity() * order.price();
-        return new OrderResult(order.id(), clientName, total);
+    record OrderFailure(int orderId, FailureReason reason, Throwable cause) {
     }
 
-    public static List<OrderResult> processAll(List<Order> orders, int poolSize, long timeout, TimeUnit unit) {
-        ExecutorService executor = Executors.newFixedThreadPool(poolSize);
-        List<OrderResult> results = new ArrayList<>();
+    record ProcessingResult(List<OrderResult> succeeded, List<OrderFailure> failed) {
+    }
 
+    record Submitted(Order order, Future<OrderResult> future) {
+    }
+
+    static class ProcessingInterruptedException extends RuntimeException {
+        ProcessingInterruptedException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    static class QueryTimeoutException extends RuntimeException {
+        QueryTimeoutException(String message) {
+            super(message);
+        }
+    }
+
+    static final long QUERY_TIMEOUT_MS = 2_000;
+
+    enum FailureReason {
+        ERROR,
+        TIMEOUT,
+        CANCELLED,
+        INTERRUPTED
+    }
+
+    static OrderResult process(Order order) {
         try {
-            List<Future<OrderResult>> futures = new ArrayList<>();
-            for (Order order : orders) {
-                futures.add(executor.submit(() -> process(order)));
+            // заказ 42 "зависает", каждый 25-й падает с ошибкой
+            long delayMs = order.id() == 42 ? 3_000 : 100;
+            Thread.sleep(Math.min(delayMs, QUERY_TIMEOUT_MS));
+            if (delayMs > QUERY_TIMEOUT_MS) {
+                throw new QueryTimeoutException("запрос по заказу " + order.id() + " превысил" + QUERY_TIMEOUT_MS + " мс");
             }
 
-            for (Future<OrderResult> future : futures) {
+            if (order.id() % 25 == 0) {
+                throw new IllegalStateException("Клиент не найден для заказа " + order.id());
+            }
+
+            String clientName = "Client-" + order.clientId();
+            double total = order.quantity() * order.price();
+            return new OrderResult(order.id(), clientName, total);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ProcessingInterruptedException("Обработка заказа " + order.id() + " прервана", e);
+        }
+    }
+
+    public static ProcessingResult processAll(List<Order> orders, int poolSize, long timeout, TimeUnit unit) {
+        ExecutorService executor = Executors.newFixedThreadPool(poolSize);
+        List<OrderResult> results = new ArrayList<>();
+        List<OrderFailure> failed = new ArrayList<>();
+
+        try {
+            List<Submitted> submitted = new ArrayList<>();
+            for (Order order : orders) {
+                submitted.add(new Submitted(order, executor.submit(() -> process(order))));
+            }
+
+            for (int i = 0; i < submitted.size(); i++) {
+                Submitted s = submitted.get(i);
                 try {
-                    results.add(future.get(timeout, unit));
+                    results.add(s.future().get(timeout, unit));
                 } catch (ExecutionException e) {
-                    System.err.println("Ошибка в задаче: " + e.getCause());
+                    failed.add(new OrderFailure(s.order().id(), FailureReason.ERROR, e.getCause()));
+                } catch (CancellationException e) {
+                    failed.add(new OrderFailure(s.order().id(), FailureReason.CANCELLED, e));
                 } catch (TimeoutException e) {
-                    System.err.println("Таймаут, отменяем задачу");
-                    future.cancel(true);
+                    s.future().cancel(true);
+                    failed.add(new OrderFailure(s.order().id(), FailureReason.TIMEOUT, e));
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    futures.forEach(f -> f.cancel(true));
+                    for (int j = i; j < submitted.size(); j++) {
+                        Submitted rest = submitted.get(j);
+                        rest.future().cancel(true);
+                        failed.add(new OrderFailure(rest.order().id(), FailureReason.INTERRUPTED, e));
+                    }
                     break;
                 }
             }
         } finally {
             shutdownGracefully(executor);
         }
-        return results;
+        return new ProcessingResult(results, failed);
     }
 
     private static void shutdownGracefully(ExecutorService executor) {
@@ -81,14 +131,20 @@ public class OrderProcessor {
             .toList();
 
         long start = System.currentTimeMillis();
+        ProcessingResult result = processAll(orders, 10, 1, TimeUnit.SECONDS);
+        long elapsed = System.currentTimeMillis() - start;
 
         System.out.println("Количество ядер: " + Runtime.getRuntime().availableProcessors());
 
-        List<OrderResult> results = processAll(orders, 10, 1, TimeUnit.SECONDS);
-        long elapsed = System.currentTimeMillis() - start;
+        System.out.println("Обработано успешно: " + result.succeeded().size() + " из " + orders.size());
+        System.out.println("Первые 3: " + result.succeeded().subList(0, 3));
 
-        System.out.println("Обработано успешно: " + results.size() + " из " + orders.size());
-        System.out.println("Первые 3: " + results.subList(0, 3));
+        Map<FailureReason, Long> byReason = result.failed().stream()
+                .collect(Collectors.groupingBy(OrderFailure::reason, TreeMap::new, Collectors.counting()));
+
+        System.out.println("Неуспешных: " + result.failed().size() + " " + byReason);
+        result.failed().forEach(f -> System.out.println("  заказ " + f.orderId() + " -> " + f.reason()
+            + (f.cause() == null ? "" : ": " + f.cause())));
         System.out.println("Время: " + elapsed + " мс");
     }
 }
