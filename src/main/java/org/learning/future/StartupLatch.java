@@ -2,14 +2,15 @@ package org.learning.future;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 // ## Задача 4
 public class StartupLatch {
@@ -17,14 +18,47 @@ public class StartupLatch {
     static final long MIN_DELAY_MS = 200;
     static final long MAX_DELAY_MS = 801;
 
-    record Component(String name, long delayMs, boolean fails) {
+    record Component(String name, long delayMs, Supplier<? extends Exception> failure) {
+        static Component ok(String name, long delayMs) {
+            return new Component(name, delayMs, null);
+        }
+
+        static Component failing(String name, long delayMs, Supplier<? extends Exception> failure) {
+            return new Component(name, delayMs, failure);
+        }
+    }
+
+    enum Status {LOADED, FAILED, TIMED_OUT}
+
+    // Итог загрузки одного компонента
+    record LoadOutcome(String component, Status status, Throwable cause) {
+        static LoadOutcome loaded(String component) {
+            return new LoadOutcome(component, Status.LOADED, null);
+        }
+
+        static LoadOutcome failed(String component, Throwable cause) {
+            return new LoadOutcome(component, Status.FAILED, cause);
+        }
+
+        static LoadOutcome timedOut(String component) {
+            return new LoadOutcome(component, Status.TIMED_OUT, null);
+        }
+
+        // описание причины, безопасное при getMessage() == null
+        String describeCause() {
+            if (cause == null) {
+                return "";
+            }
+            String message = cause.getMessage();
+            return cause.getClass().getSimpleName() + (message == null ? "" : ": " + message);
+        }
     }
 
     static List<Component> randomComponents() {
         return List.of(
-            new Component("Config", randomDelay(), false),
-            new Component("Dictionaries", randomDelay(), false),
-            new Component("Cache", randomDelay(), false));
+            Component.ok("Config", randomDelay()),
+            Component.ok("Dictionaries", randomDelay()),
+            Component.ok("Cache", randomDelay()));
     }
 
     static long randomDelay() {
@@ -34,8 +68,8 @@ public class StartupLatch {
     // Имитация загрузки
     static void load(Component component) throws Exception {
         Thread.sleep(component.delayMs);
-        if (component.fails()) {
-            throw new IllegalStateException("не удалось загрузить " + component.name);
+        if (component.failure() != null) {
+            throw component.failure().get();
         }
     }
 
@@ -49,8 +83,11 @@ public class StartupLatch {
                     try {
                         load(component);
                         System.out.println(" загружен: " + component.name() + " (" + component.delayMs() + " мс)");
-                    } catch (Exception e) {
-                        // ничего не делаем
+                    } catch (Throwable t) {
+                        if (t instanceof InterruptedException) {
+                            Thread.currentThread().interrupt();
+                        }
+                        System.out.println("  ошибка загрузки " + component.name() + ": " + t);
                     } finally {
                         latch.countDown();
                     }
@@ -64,50 +101,81 @@ public class StartupLatch {
     }
 
     // timeout + обработка неудачной загрузки
-    static boolean startWithTimeout(List<Component> components, long timeout, TimeUnit unit) throws InterruptedException {
+    // Загружает все компоненты параллельно и ждёт не дольше timeout
+    static List<LoadOutcome> loadAll(List<Component> components, long timeout, TimeUnit unit) throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(components.size());
-        Set<String> loaded = ConcurrentHashMap.newKeySet();
-        Map<String, String> failed = new ConcurrentHashMap<>();
         ExecutorService executor = Executors.newFixedThreadPool(components.size());
 
         try {
+            List<Future<LoadOutcome>> futures = new ArrayList<>();
             for (Component component : components) {
-                executor.submit(() -> {
-                    try {
-                        load(component);
-                        loaded.add(component.name);
-                    } catch (Exception e) {
-                        failed.put(component.name(), e.getMessage());
-                    } finally {
-                        latch.countDown();
-                    }
-                });
+                futures.add(executor.submit(() -> loadOne(component, latch)));
             }
+
             boolean finishedInTime = latch.await(timeout, unit);
 
-            if (!finishedInTime) {
-                // считаем незавершённые ДО shutdownNow(), иначе прерванные попадут в failed
-                List<String> unfinished = new ArrayList<>();
-                for (Component component : components) {
-                    if (!loaded.contains(component.name()) && !failed.containsKey(component.name())) {
-                        unfinished.add(component.name());
-                    }
-                }
-                System.out.println("  ТАЙМАУТ: не успели загрузиться " + unfinished + ", старт отменён");
-                executor.shutdownNow();
-                return false;
-            }
-            // latch открылся, но не факт, что все задачи загрузились успешно
-            if (!failed.isEmpty()) {
-                System.out.println("  ОШИБКА загрузки: " + failed + ", старт отменён");
-                return false;
-            }
+            List<LoadOutcome> outcomes = new ArrayList<>();
+            for (int i = 0; i < components.size(); i++) {
+                String name = components.get(i).name();
+                Future<LoadOutcome> future = futures.get(i);
 
-            System.out.println("  все компоненты загружены " + loaded.size() + "/" + components.size() + " -> приложение стартует");
-            return true;
+                if (!finishedInTime && future.cancel(true)) {
+                    outcomes.add(LoadOutcome.timedOut(name));
+                } else {
+                    outcomes.add(resultOf(name, future));
+                }
+            }
+            return outcomes;
         } finally {
-            executor.shutdownNow(); // либо всё завершено, либо отменено
+            executor.shutdownNow();
         }
+    }
+
+    private static LoadOutcome loadOne(Component component, CountDownLatch latch) {
+        try {
+            load(component);
+            return LoadOutcome.loaded(component.name());
+        } catch (Throwable t) {
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            return LoadOutcome.failed(component.name(), t);
+        } finally {
+            latch.countDown();
+        }
+    }
+
+    private static LoadOutcome resultOf(String name, Future<LoadOutcome> future) throws InterruptedException {
+        try {
+            return future.get();
+        } catch (ExecutionException e) {
+            return LoadOutcome.failed(name, e.getCause());
+        } catch (CancellationException e) {
+            return LoadOutcome.failed(name, e);
+        }
+    }
+
+    static boolean startApplication(List<Component> components, long timeout, TimeUnit unit) throws InterruptedException {
+        List<LoadOutcome> outcomes = loadAll(components, timeout, unit);
+        List<String> loaded = outcomes.stream()
+            .filter(o -> o.status() == Status.LOADED).map(LoadOutcome::component).toList();
+        List<LoadOutcome> failed = outcomes.stream()
+            .filter(o -> o.status() == Status.FAILED).toList();
+        List<String> timedOut = outcomes.stream()
+            .filter(o -> o.status() == Status.TIMED_OUT).map(LoadOutcome::component).toList();
+
+        System.out.println("  загружены: " + loaded);
+        failed.forEach(o -> System.out.println("  с ошибкой: " + o.component() + " (" + o.describeCause() + ")"));
+        if (!timedOut.isEmpty()) {
+            System.out.println("  не успели за отведённое время: " + timedOut);
+        }
+
+        // строгая проверка: успешных ровно столько, сколько ожидали
+        boolean allLoaded = loaded.size() == components.size();
+        System.out.println(allLoaded
+            ? "  загружено " + loaded.size() + "/" + components.size() + " -> приложение стартует"
+            : "  загружено " + loaded.size() + "/" + components.size() + " -> старт отменён");
+        return allLoaded;
     }
 
     public static void main(String[] args) throws Exception {
@@ -115,21 +183,33 @@ public class StartupLatch {
         startBasic(randomComponents());
 
         System.out.println("\n2) С таймаутом 3 с, всё грузится нормально:");
-        startWithTimeout(randomComponents(), 3, TimeUnit.SECONDS);
+        startApplication(randomComponents(), 3, TimeUnit.SECONDS);
 
         System.out.println("\n3) Один компонент падает с исключением:");
-        startWithTimeout(List.of(
-            new Component("Config", 300, false),
-            new Component("Dictionaries", 500, true),
-            new Component("Cache", 400, false)), 3, TimeUnit.SECONDS);
+        startApplication(List.of(
+            Component.ok("Config", 300),
+            Component.failing("Dictionaries", 500, () -> new IllegalStateException("не удалось загрузить Dictionaries")),
+            Component.ok("Cache", 400)), 3, TimeUnit.SECONDS);
 
-        System.out.println("\n4) Один компонент слишком медленный (таймаут 1,5 с):");
-        startWithTimeout(List.of(
-            new Component("Config", 300, false),
-            new Component("Dictionaries", 500, false),
-            new Component("Cache", 10_000, false)), 1500, TimeUnit.MILLISECONDS);
+        System.out.println("\n4) Исключение БЕЗ сообщения (getMessage() == null):");
+        startApplication(List.of(
+            Component.ok("Config", 300),
+            Component.failing("Dictionaries", 500, IllegalStateException::new),
+            Component.ok("Cache", 400)), 3, TimeUnit.SECONDS);
 
-        System.out.println("\n5) CountDownLatch одноразовый:");
+        System.out.println("\n5) Один компонент слишком медленный (таймаут 1,5 с):");
+        startApplication(List.of(
+            Component.ok("Config", 300),
+            Component.ok("Dictionaries", 500),
+            Component.ok("Cache", 10_000)), 1500, TimeUnit.MILLISECONDS);
+
+        System.out.println("\n6) Один упал, другой не успел:");
+        startApplication(List.of(
+            Component.failing("Config", 300, () -> new IllegalStateException("битый файл конфигурации")),
+            Component.ok("Dictionaries", 500),
+            Component.ok("Cache", 10_000)), 1500, TimeUnit.MILLISECONDS);
+
+        System.out.println("\n7) CountDownLatch одноразовый:");
         CountDownLatch latch = new CountDownLatch(1);
         latch.countDown();
         System.out.println("  счётчик = " + latch.getCount() + ", await() возвращается сразу");

@@ -8,17 +8,21 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.TreeMap;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 // ## Задача 3
 public class LogCounter {
 
     static final int THREADS = 4;
+    static final int QUEUE_CAPACITY = 100;
 
     static String typeOf(String message) {
         if (message == null || message.isBlank()) {
@@ -29,8 +33,31 @@ public class LogCounter {
         return space < 0 ? trimmed : trimmed.substring(0, space);
     }
 
+    // Пул с ограниченной очередью вместо Executors.newFixedThreadPool
+    static ExecutorService newBoundedPool(int threads, int queueCapacity) {
+        AtomicInteger counter = new AtomicInteger();
+        ThreadFactory namedThreads = runnable -> new Thread(runnable, "log-worker-" + counter.incrementAndGet());
+        return new ThreadPoolExecutor(
+            threads, threads,
+            0L, TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(queueCapacity),
+            namedThreads,
+            new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+    }
+
+    // делит список на parts примерно равных частей
+    static <T> List<List<T>> partition(List<T> list, int parts) {
+        int chunkSize = (list.size() + parts - 1) / parts;
+        List<List<T>> chunks = new ArrayList<>();
+        for (int from = 0; from < list.size(); from += chunkSize) {
+            chunks.add(list.subList(from, Math.min(from + chunkSize, list.size())));
+        }
+        return chunks;
+    }
+
     static <T> List<T> runAll(List<Callable<T>> tasks, int threads) throws Exception {
-        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        ExecutorService executor = newBoundedPool(threads, QUEUE_CAPACITY);
         try {
             List<T> results = new ArrayList<>();
             for (Future<T> future : executor.invokeAll(tasks)) {
@@ -47,11 +74,13 @@ public class LogCounter {
         Map<String, Integer> counts = new ConcurrentHashMap<>();
 
         List<Callable<Void>> tasks = new ArrayList<>();
-        for (String message : messages) {
+        for (List<String> chunk : partition(messages, threads)) {
             tasks.add(() -> {
-                String type = typeOf(message);
-                if (type != null) {
-                    counts.merge(type, 1, Integer::sum); // атомарно прочитать, прибавить, записать
+                for (String message : chunk) {
+                    String type = typeOf(message);
+                    if (type != null) {
+                        counts.merge(type, 1, Integer::sum);
+                    }
                 }
                 return null;
             });
@@ -65,12 +94,14 @@ public class LogCounter {
         Map<String, Integer> counts = new ConcurrentHashMap<>();
 
         List<Callable<Void>> tasks = new ArrayList<>();
-        for (String message : messages) {
+        for (List<String> chunk : partition(messages, threads)) {
             tasks.add(() -> {
-                String type = typeOf(message);
-                if (type != null) {
-                    Integer current = counts.get(type);
-                    counts.put(type, current == null ? 1 : current + 1);
+                for (String message : chunk) {
+                    String type = typeOf(message);
+                    if (type != null) {
+                        Integer current = counts.get(type);
+                        counts.put(type, current == null ? 1 : current + 1);
+                    }
                 }
                 return null;
             });
@@ -84,11 +115,13 @@ public class LogCounter {
         Map<String, AtomicInteger> counts = new ConcurrentHashMap<>();
 
         List<Callable<Void>> tasks = new ArrayList<>();
-        for (String message : messages) {
+        for (List<String> chunk : partition(messages, threads)) {
             tasks.add(() -> {
-                String type = typeOf(message);
-                if (type != null) {
-                    counts.computeIfAbsent(type, k -> new AtomicInteger()).incrementAndGet();
+                for (String message : chunk) {
+                    String type = typeOf(message);
+                    if (type != null) {
+                        counts.computeIfAbsent(type, k -> new AtomicInteger()).incrementAndGet();
+                    }
                 }
                 return null;
             });
@@ -102,11 +135,9 @@ public class LogCounter {
 
     // каждый worker считает свою часть, затем агрегация
     static Map<String, Integer> countByChunks(List<String> messages, int threads) throws Exception {
-        int chunkSize = (messages.size() + threads - 1) / threads; // округление вверх
 
         List<Callable<Map<String, Integer>>> tasks = new ArrayList<>();
-        for (int from = 0; from < messages.size(); from += chunkSize) {
-            List<String> chunk = messages.subList(from, Math.min(from + chunkSize, messages.size()));
+        for (List<String> chunk : partition(messages, threads)) {
             tasks.add(() -> {
                 // локальная обычная HashMap: её видит только этот поток, синхронизация не нужна
                 Map<String, Integer> local = new HashMap<>();
@@ -150,6 +181,15 @@ public class LogCounter {
         List<String> dirty = new ArrayList<>(List.of("INFO ok", "  ", "ERROR boom"));
         dirty.add(null);
         report("с мусором во входе", countWithMerge(dirty, THREADS), Map.of("INFO", 1, "ERROR", 1));
+        // пустой вход
+        report("пустой вход", countWithMerge(List.of(), THREADS), Map.of());
+
+        // большой вход: при задаче на каждую строку это были бы миллионы объектов в очереди
+        List<String> big = generateMessages(1_500_000, 900_000, 600_000);
+        long start = System.currentTimeMillis();
+        Map<String, Integer> bigResult = countWithMerge(big, THREADS);
+        System.out.println("3 млн сообщений: " + new TreeMap<>(bigResult)
+            + " за " + (System.currentTimeMillis() - start) + " мс");
     }
 
     private static void report(String name, Map<String, Integer> actual, Map<String, Integer> expected) {

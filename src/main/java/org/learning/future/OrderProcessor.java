@@ -91,7 +91,7 @@ public class OrderProcessor {
                 try {
                     results.add(s.future().get(timeout, unit));
                 } catch (ExecutionException e) {
-                    failed.add(new OrderFailure(s.order().id(), FailureReason.ERROR, e.getCause()));
+                    failed.add(new OrderFailure(s.order().id(), FailureReason.ERROR, e));
                 } catch (CancellationException e) {
                     failed.add(new OrderFailure(s.order().id(), FailureReason.CANCELLED, e));
                 } catch (TimeoutException e) {
@@ -107,10 +107,10 @@ public class OrderProcessor {
                     break;
                 }
             }
+            return new ProcessingResult(results, failed);
         } finally {
             shutdownGracefully(executor);
         }
-        return new ProcessingResult(results, failed);
     }
 
     private static void shutdownGracefully(ExecutorService executor) {
@@ -140,7 +140,7 @@ public class OrderProcessor {
         System.out.println("Первые 3: " + result.succeeded().subList(0, 3));
 
         Map<FailureReason, Long> byReason = result.failed().stream()
-                .collect(Collectors.groupingBy(OrderFailure::reason, TreeMap::new, Collectors.counting()));
+            .collect(Collectors.groupingBy(OrderFailure::reason, TreeMap::new, Collectors.counting()));
 
         System.out.println("Неуспешных: " + result.failed().size() + " " + byReason);
         result.failed().forEach(f -> System.out.println("  заказ " + f.orderId() + " -> " + f.reason()
