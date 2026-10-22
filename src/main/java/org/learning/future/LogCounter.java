@@ -74,9 +74,11 @@ public class LogCounter {
         Map<String, Integer> counts = new ConcurrentHashMap<>();
 
         List<Callable<Void>> tasks = new ArrayList<>();
-        for (List<String> chunk : partition(messages, threads)) {
+        for (int t = 0; t < threads; t++) {
+            int start = t;
             tasks.add(() -> {
-                for (String message : chunk) {
+                for (int i = start; i < messages.size(); i += threads) {
+                    String message = messages.get(i);
                     String type = typeOf(message);
                     if (type != null) {
                         counts.merge(type, 1, Integer::sum);
@@ -94,9 +96,11 @@ public class LogCounter {
         Map<String, Integer> counts = new ConcurrentHashMap<>();
 
         List<Callable<Void>> tasks = new ArrayList<>();
-        for (List<String> chunk : partition(messages, threads)) {
+        for (int t = 0; t < threads; t++) {
+            int start = t;
             tasks.add(() -> {
-                for (String message : chunk) {
+                for (int i = start; i < messages.size(); i += threads) {
+                    String message = messages.get(i);
                     String type = typeOf(message);
                     if (type != null) {
                         Integer current = counts.get(type);
@@ -115,9 +119,11 @@ public class LogCounter {
         Map<String, AtomicInteger> counts = new ConcurrentHashMap<>();
 
         List<Callable<Void>> tasks = new ArrayList<>();
-        for (List<String> chunk : partition(messages, threads)) {
+        for (int t = 0; t < threads; t++) {
+            int start = t;
             tasks.add(() -> {
-                for (String message : chunk) {
+                for (int i = start; i < messages.size(); i += threads) {
+                    String message = messages.get(i);
                     String type = typeOf(message);
                     if (type != null) {
                         counts.computeIfAbsent(type, k -> new AtomicInteger()).incrementAndGet();
@@ -137,17 +143,18 @@ public class LogCounter {
     static Map<String, Integer> countByChunks(List<String> messages, int threads) throws Exception {
 
         List<Callable<Map<String, Integer>>> tasks = new ArrayList<>();
-        for (List<String> chunk : partition(messages, threads)) {
+        for (int t = 0; t < threads; t++) {
+            int start = t;
             tasks.add(() -> {
-                // локальная обычная HashMap: её видит только этот поток, синхронизация не нужна
-                Map<String, Integer> local = new HashMap<>();
-                for (String message : chunk) {
-                    String type = typeOf(message);
-                    if (type != null) {
-                        local.merge(type, 1, Integer::sum);
-                    }
-                }
-                return local;
+               Map<String, Integer> local = new HashMap<>();
+               for (int i = start; i < messages.size(); i += threads) {
+                   String message = messages.get(i);
+                   String type = typeOf(message);
+                   if (type != null) {
+                       local.merge(type, 1, Integer::sum);
+                   }
+               }
+               return local;
             });
         }
         // агрегация в одном потоке (вызывающем), после завершения всех воркеров
